@@ -84,7 +84,8 @@ if __name__ == '__main__':
     if w > 0 and h > 0:
         e = TfPoseEstimator(get_graph_path(args.model), target_size=(w, h))
     else:
-        e = TfPoseEstimator(get_graph_path(args.model), target_size=(432, 368)) # 216/184 # but must be a 16 multiple
+        e = TfPoseEstimator(get_graph_path(args.model), target_size=(432, 368)) 
+        # 216/184 # but must be a 16 multiple => 224x192
     logger.debug('cam read+')
     cam = cv2.VideoCapture(args.camera)
     ret_val, image = cam.read()
@@ -127,7 +128,7 @@ if __name__ == '__main__':
             
             #~ logger.debug('postprocess+')
             image = TfPoseEstimator.draw_humans(image, humans, imgcopy=False)
-            cv2.imwrite( strFolderOut + strStamp + "_skeleton.png", image )
+            cv2.imwrite( strFolderOut + strStamp + "_skeleton.jpg", image )
             file = open( strFolderOut + strStamp + ".dat", "wt" )
             file.write( strAnalyseRes )
             file.close()
