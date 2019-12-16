@@ -1,6 +1,7 @@
 import sys
 sys.path.append("../jetson_tools/")
 import misctools
+import webcam
 
 import cv2 # made with cv 3.2.0-dev
 import numpy as np
@@ -9,112 +10,6 @@ import time
 import sys
 import v4l2capture  # can be found here : https://github.com/gebart/python-v4l2capture/blob/master/capture_picture.py
 
-def list_video_device( bPrintHighestResolution=True ):
-    import os
-    import v4l2capture
-    file_names = [x for x in os.listdir("/dev") if x.startswith("video")]
-    file_names.sort()
-    for file_name in file_names:
-        path = "/dev/" + file_name
-        print( "path: %s" % path )
-        try:
-            video = v4l2capture.Video_device(path)
-            driver, card, bus_info, capabilities = video.get_info()
-            print ("    driver:       %s\n    card:         %s" \
-                "\n    bus info:     %s\n    capabilities  : %s" % (
-                    driver, card, bus_info, ", ".join(capabilities)) )
-                    
-            if bPrintHighestResolution:
-                w,h = video.set_format(100000,100000)
-                print( "    highest format: %dx%d" % (w,h) );
-                    
-            video.close()
-        except IOError as e:
-            print("    " + str(e) )
-            
-
-def get_video_devices():
-    import os
-    device_path = "/dev"
-    file_names = [os.path.join(device_path, x) for x in os.listdir(device_path) if x.startswith("video")]
-    return file_names
-
-
-class WebCam():
-    """
-    Access webcam(s) using video4linux (v4l2)
-    eg:
-        webcam = WebCam();
-        im = webcam.getImage();
-        cv2.imwrite( "/tmp/test.jpg", im )
-    """
-    def __init__( self, strDeviceName = "/dev/video0", nWidth = 640, nHeight = 480, nNbrBuffer = 1 ):
-        """
-        - nNbrBuffer: put a small number to have short latency a big one to prevent missing frames
-        """
-        print( "INF: WebCam: opening: '%s'" % strDeviceName );
-        self.video = v4l2capture.Video_device(strDeviceName)
-        # Suggest an image size to the device. The device may choose and
-        # return another size if it doesn't support the suggested one.
-        self.size_x, self.size_y = self.video.set_format(nWidth, nHeight)
-        print( "format is: %dx%d" % (self.size_x, self.size_y) );
-
-        # not working on the webcam device.
-        #framerate = self.video.set_fps(30); # can't succeed in changing that on my cheap webcam, but work on my computer
-        #print( "framerate is: %d" % (framerate) );
-        
-        # Create a buffer to store image data in. This must be done before
-        # calling 'start' if v4l2capture is compiled with libv4l2. Otherwise
-        # raises IOError.
-        self.video.create_buffers(nNbrBuffer) # would be better to play with fps, but it's not working on mine...
-        # Send the buffer to the device. Some devices require this to be done
-        # before calling 'start'.
-        self.video.queue_all_buffers()
-        # Start the device. This lights the LED if it's a camera that has one.
-        self.video.start()
-        print( "INF: WebCam: opening: '%s' - done" % strDeviceName );
-        
-    def __del__( self ):
-        self.video.close()
-    
-    def getImage(self, bVerbose =  True ):
-        """
-        return an image, None on error
-        """
-        if bVerbose: print("INF: WebCam.getImage: Reading image...")
-        # Wait for the device to fill the buffer.
-        rStartAcquistion = time.time()
-        aRet = select.select((self.video,), (), ()) # Wait for the device to fill the buffer.
-        if bVerbose: print( "DBG: WebCam.getImage: select return: %s" % str(aRet) );
-        try:
-            image_data = self.video.read_and_queue()
-        except BaseException as err:
-            print( "WRN: skipping image: %s" % str(err) )
-            time.sleep( 0.2 )
-            return None
-            
-        rEndAquisition = time.time()
-        rImageAquisitionDuration =  rEndAquisition - rStartAcquistion
-
-        #image = Image.fromstring("RGB", (size_x, size_y), image_data)
-        #image.save(strFilename)
-        
-        
-        if bVerbose: print( "image_data len: %s" % len(image_data) )
-        if len(image_data) == self.size_x * self.size_y * 3:
-            # color image
-            nparr = np.fromstring(image_data, np.uint8).reshape( self.size_y,self.size_x,3)
-            nparr = cv2.cvtColor(nparr, cv2.COLOR_BGR2RGB);
-        else:
-            # grey on 16 bits (depth on 16 bits)
-            nparr = np.fromstring(image_data, np.uint16).reshape( self.size_y,self.size_x,1)
-            minv = np.amin(nparr)
-            maxv = np.amax(nparr)
-            print( "min: %s, max: %s" % (minv, maxv) )            
-            nparr /= 64
-            #nparr = cv2.cvtColor(nparr, cv2.COLOR_BGR2RGB);            
-        return nparr
-# class WebCam - end
 
 
         
@@ -129,10 +24,10 @@ if __name__ == "__main__":
         else:
             nNumCamera = int(sys.argv[1])
             
-    list_video_device()
-    webcam = WebCam(strDeviceName = "/dev/video%d" % nNumCamera );
-    im = webcam.getImage();
-    im = webcam.getImage();
+    webcam.list_video_device()
+    wcam = webcam.WebCam(strDeviceName = "/dev/video%d" % nNumCamera );
+    im = wcam.getImage();
+    im = wcam.getImage();
 
     strWindowName = "camera %d" % nNumCamera
     
@@ -143,13 +38,18 @@ if __name__ == "__main__":
 
     strPrevName = ""
     imPrev = im[:]
-    im[:]=(0,0,0) # first one refresh at first!
+    im[:]=(255,255,255) # first one => refresh at first!
     timeLastOutputtedHtml = time.time()
     strCurrentImageInHtml = ""
     strPrevImageInHtml = ""
     bPreviousWasDifferent = False # you need to update once more, as the image in the html is always the previews one (for refresh blinking avoidance)
+    # center of image
+    xc1 = int(im.shape[1]*1/4)
+    xc2 = int(im.shape[1]*3/4)
+    yc1 = int(im.shape[0]*1/4)
+    yc2 = int(im.shape[0]*3/4)
     while( 1 ):
-        im = webcam.getImage(bVerbose=False);
+        im = wcam.getImage(bVerbose=False);
         if not im is None:
             if 0:
                 cv2.imshow(strWindowName,im)
@@ -163,14 +63,28 @@ if __name__ == "__main__":
                 nCptFrame = 0
                 begin = time.time()
             if 1:
-                rDiff = misctools.mse(im,imPrev)
+                rDiff = misctools.mse(im,imPrev, bDenoise=True)
+                rDiffCenter = misctools.mse(im[yc1:yc2,xc1:xc2],imPrev[yc1:yc2,xc1:xc2], bDenoise=True)
+                rAvgColor = im.mean()
                 imPrev = im
-                #~ print("DBG: rDiff: %5.2f" % rDiff )
+                print("DBG: rDiff: %5.2f, rDiffCenter: %5.2f, color: %5.2f" % (rDiff,rDiffCenter, rAvgColor) )
                 livedataFilename = "/var/www/html/data/liveData"
                 #~ livedataFilename = "/var/www/html/data/notify.asp"
                 bRewriteHtml = False
                 
-                if rDiff > 750: # in daylight, it's around 700
+                # 4 types de lumiere, regit la couleur: 
+                # - nuit avec juste tele: 4
+                # - juste sam: 14
+                # - sombre avec juste salon: 35
+                # - en journee: ??
+                
+                # avec bDenoise=True
+                # rDiff: 70/ 60/ 130/ 700
+                # rDiffCenter: 70/ 105/ 130/ 700
+                
+                if      (rAvgColor < 40 and (rDiff > 250 or rDiffCenter > 150) ) \
+                    or  (rAvgColor > 40 and (rDiff > 300 or rDiffCenter > 200) ) \
+                    : 
                     bPreviousWasDifferent = True
                     print("DBG: writing image...")
                     # write image and update liveData for html server
@@ -191,8 +105,8 @@ if __name__ == "__main__":
                     time.sleep(1.2) # don't refresh too often !
                 else:
                     bPreviousWasDifferent = False
-                    time.sleep(0.1)
-                    if time.time() - timeLastOutputtedHtml > 30.:
+                    time.sleep(0.2)
+                    if time.time() - timeLastOutputtedHtml > 120.:
                         bRewriteHtml = True
                     
                 if bRewriteHtml or bPreviousWasDifferent:
@@ -201,7 +115,7 @@ if __name__ == "__main__":
                     file = open(livedataFilename, "wt")
                     #file.write("<IMG SRC=./data/%s></IMG>" % strImageName )
                     file.write("<IMG SRC=./data/%s width=1024></IMG><br>%s<br>" % (strPrevImageInHtml, strCurrentTime ) )
-                    file.write("<IMG SRC=./data/%s width=10></IMG><br>" % strCurrentImageInHtml )
+                    file.write("<IMG SRC=./data/%s width=1024></IMG><br>" % strCurrentImageInHtml )
                     file.write("<font size=-10>last computed: %s</font>" % misctools.getTimeStamp() )
                     file.write("<!--end-->" )
                     file.close()
