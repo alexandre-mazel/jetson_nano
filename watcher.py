@@ -34,7 +34,7 @@ if __name__ == "__main__":
     nCptFrame = 0
     begin = time.time()
     
-    aLastName = [] 
+    aLastTimeAndName = []
 
     strPrevName = ""
     imPrev = im[:]
@@ -88,21 +88,16 @@ if __name__ == "__main__":
                     bPreviousWasDifferent = True
                     print("DBG: writing image...")
                     # write image and update liveData for html server
+                    # write image and update liveData for html server
                     strImageName = "%s.jpg" % misctools.getFilenameFromTime() #time.time()
                     strTotalImageName = "/var/www/html/data/" + strImageName
                     cv2.imwrite( strTotalImageName, im,[int(cv2.IMWRITE_JPEG_QUALITY), 80] )
-                    aLastName.append(strImageName)
-                    aLastName = aLastName[:-5]
-                    
-                    if strPrevName == "":
-                        strPrevName = strImageName
-                    strCurrentImageInHtml = strImageName
-                    strPrevImageInHtml = strPrevName
                     strCurrentTime = misctools.getTimeStamp()
+                    aLastTimeAndName.append([strCurrentTime,strImageName])
+                    aLastTimeAndName = aLastTimeAndName[-9:] # nbr image per pages
                     
                     bRewriteHtml = True
-                    strPrevName = strImageName
-                    time.sleep(1.2) # don't refresh too often !
+                    time.sleep(0.5) # don't refresh too often !
                 else:
                     bPreviousWasDifferent = False
                     time.sleep(0.2)
@@ -114,9 +109,15 @@ if __name__ == "__main__":
                     #~ generateHtml(aLastName, bReverse)
                     file = open(livedataFilename, "wt")
                     #file.write("<IMG SRC=./data/%s></IMG>" % strImageName )
-                    file.write("<IMG SRC=./data/%s width=1024></IMG><br>%s<br>" % (strPrevImageInHtml, strCurrentTime ) )
-                    file.write("<IMG SRC=./data/%s width=1024></IMG><br>" % strCurrentImageInHtml )
-                    file.write("<font size=-10>last computed: %s</font>" % misctools.getTimeStamp() )
+                    file.write("<table><tr>")
+                    nCpt = 0
+                    print("aLastTimeAndName:%s"%aLastTimeAndName)
+                    for s,f in aLastTimeAndName:
+                        file.write("<td><IMG SRC=./data/%s width=640></IMG><br><center>%s</td>" % (f, s) )
+                        if (nCpt % 3) == 2:
+                            file.write("</tr><tr>")
+                        nCpt += 1
+                    file.write("</tr></table><font size=-10>last computed: %s</font>" % misctools.getTimeStamp() )
                     file.write("<!--end-->" )
                     file.close()
                     timeLastOutputtedHtml = time.time()
