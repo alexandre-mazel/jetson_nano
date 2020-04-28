@@ -55,18 +55,27 @@ def show_camera():
     cw = 3280
     ch = 2464
     
+    cw,ch = (1920,1080)
+    cw,ch = (1280,720)
+
+    
     rw = 640
     rh = (rw*ch)/cw
 
-    cap = cv2.VideoCapture(gstreamer_pipeline(flip_method=0,capture_width=cw, capture_height=ch,framerate=28,display_width=cw,display_height=ch), cv2.CAP_GSTREAMER)
+    cap = cv2.VideoCapture(gstreamer_pipeline(flip_method=0,capture_width=cw, capture_height=ch,framerate=60,display_width=cw,display_height=ch), cv2.CAP_GSTREAMER)
     if cap.isOpened():
         window_handle = cv2.namedWindow("CSI Camera", cv2.WINDOW_AUTOSIZE)
         # Window
         timeBegin = time.time()
         nCptFrame = 0
         while cv2.getWindowProperty("CSI Camera", 0) >= 0:
-            ret_val, img = cap.read()
-            #~ img_reduced = cv2.resize(img, (rw,rh) )
+            if 0:
+                # skip always some frame, it's better than running late on buffer then receiving a jump every 2sec...
+                for i in range(4):
+                    cap.grab()
+                
+            ret_val, img = cap.read() 
+            img_reduced = cv2.resize(img, (rw,rh) )
             #~ print(img_reduced.shape)
             #~ cv2.imshow("CSI Camera", img_reduced)
             # This also acts as
