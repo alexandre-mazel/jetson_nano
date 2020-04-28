@@ -14,6 +14,11 @@ import time
 # display_width and display_height determine the size of the window on the screen
 
 
+## encode jpg:
+#gst-launch-1.0 nvarguscamerasrc num-buffers=1 ! 'video/x-raw(memory:NVMM), width=1920, height=1080, format=NV12' ! nvjpegenc ! filesink location=test.jpg
+## encode h264
+#FILE=filename.mp4
+#gst-launch-1.0 nvarguscamerasrc ! 'video/x-raw(memory:NVMM), width=1920, height=1080,format=NV12, framerate=30/1' ! omxh264enc ! qtmux ! filesink location=$FILE -e 
 def gstreamer_pipeline(
     capture_width=1280,
     capture_height=720,
@@ -22,6 +27,7 @@ def gstreamer_pipeline(
     framerate=60,
     flip_method=0,
 ):
+    print("pipeline: %dx%d => %dx%d @ %dfps" % (capture_width,capture_height,display_width,display_height,framerate) )
     return (
         "nvarguscamerasrc ! "
         "video/x-raw(memory:NVMM), "
@@ -45,12 +51,14 @@ def gstreamer_pipeline(
 def show_camera():
     # To flip the image, modify the flip_method parameter (0 and 2 are the most common)
     print(gstreamer_pipeline(flip_method=0))
-    cw = 1920
-    ch = 1080
+    # 3280x2464: fish eye!
+    cw = 3280
+    ch = 2464
+    
     rw = 640
     rh = (rw*ch)/cw
 
-    cap = cv2.VideoCapture(gstreamer_pipeline(flip_method=0,capture_width=cw, capture_height=ch,framerate=30,display_width=cw,display_height=ch), cv2.CAP_GSTREAMER)
+    cap = cv2.VideoCapture(gstreamer_pipeline(flip_method=0,capture_width=cw, capture_height=ch,framerate=28,display_width=cw,display_height=ch), cv2.CAP_GSTREAMER)
     if cap.isOpened():
         window_handle = cv2.namedWindow("CSI Camera", cv2.WINDOW_AUTOSIZE)
         # Window
@@ -58,9 +66,9 @@ def show_camera():
         nCptFrame = 0
         while cv2.getWindowProperty("CSI Camera", 0) >= 0:
             ret_val, img = cap.read()
-            img_reduced = cv2.resize(img, (rw,rh) )
+            #~ img_reduced = cv2.resize(img, (rw,rh) )
             #~ print(img_reduced.shape)
-            cv2.imshow("CSI Camera", img_reduced)
+            #~ cv2.imshow("CSI Camera", img_reduced)
             # This also acts as
             keyCode = cv2.waitKey(1) & 0xFF
             # Stop the program on the ESC key
